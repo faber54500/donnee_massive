@@ -1,0 +1,79 @@
+services:
+  # --- PARTIE 1 : LE STOCKAGE (HADOOP HDFS) ---
+  namenode:
+    image: mon-image-tp-globale
+    container_name: namenode
+    hostname: namenode
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    volumes:
+      - ./data:/data
+      - hadoop_config:/etc/hadoop # Volume pour synchroniser la config
+    environment:
+      - HADOOP_CONF_CORE_SITE_fs_defaultFS=hdfs://namenode:9000
+    # Commande qui formate seulement si nécessaire pour ne pas perdre l'ID à chaque reboot
+    command: >
+      bash -c "if [ ! -d /tmp/hadoop-root/dfs/name/current ]; then
+        echo 'First start: Formatting NameNode...';
+        hdfs namenode -format -force;
+      fi;
+      hdfs namenode"
+
+  datanode:
+    image: mon-image-tp-globale
+    container_name: datanode
+    depends_on:
+      - namenode
+    volumes:
+      - ./data:/data
+      - hadoop_config:/etc/hadoop # Partage la même config que le NameNode
+    environment:
+      - HADOOP_CONF_CORE_SITE_fs_defaultFS=hdfs://namenode:9000
+    # Nettoie les données résiduelles pour accepter le ClusterID du NameNode
+    command: >
+      bash -c "rm -rf /tmp/hadoop-root/dfs/data/*;
+      sleep 10;
+      hdfs datanode"
+
+  # --- PARTIE 2 : LE CALCUL (APACHE SPARK) ---
+  spark-master:
+    image: mon-image-tp-globale
+    container_name: spark-master
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    volumes:
+      - ./apps:/opt/spark-apps
+      - ./data:/opt/spark-data
+    environment:
+      - HADOOP_CONF_CORE_SITE_fs_defaultFS=hdfs://namenode:9000
+    command: /opt/spark-3.3.1-bin-hadoop3/bin/spark-class org.apache.spark.deploy.master.Master --ip spark-master --port 7077
+
+  spark-worker:
+    image: mon-image-tp-globale
+    container_name: spark-worker
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - HADOOP_CONF_CORE_SITE_fs_defaultFS=hdfs://namenode:9000
+    command: /opt/spark-3.3.1-bin-hadoop3/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+
+  # --- PARTIE 3 : LA BASE DE DONNÉES (MONGODB) ---
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+volumes:
+  mongo_data:
+  hadoop_config: # Nouveau volume pour la cohérence du cluster
+
+
+
+
+
