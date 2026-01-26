@@ -1,0 +1,55 @@
+services:
+  # --- PARTIE 1 : LE STOCKAGE (HADOOP HDFS) ---
+  namenode:
+    image: mon-image-tp-globale
+    container_name: namenode
+    hostname: namenode
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    volumes:
+      - ./data:/data
+    command: >
+      bash -c "if [ ! -d /tmp/hadoop-root/dfs/name/current ]; then
+        hdfs namenode -format;
+      fi;
+      hdfs namenode"
+
+  datanode:
+    image: mon-image-tp-globale
+    container_name: datanode
+    depends_on:
+      - namenode
+    volumes:
+      - ./data:/data
+    command: >
+      bash -c "rm -rf /tmp/hadoop-root/dfs/data/*;
+      sleep 10;
+      hdfs datanode"
+
+  # --- PARTIE 2 : LE CALCUL (APACHE SPARK) ---
+  spark-master:
+    image: mon-image-tp-globale
+    container_name: spark-master
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    volumes:
+      - ./apps:/opt/spark-apps
+    command: /opt/spark-3.3.1-bin-hadoop3/bin/spark-class org.apache.spark.deploy.master.Master --ip spark-master --port 7077
+
+  spark-worker:
+    image: mon-image-tp-globale
+    container_name: spark-worker
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+    command: /opt/spark-3.3.1-bin-hadoop3/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+
+  # --- PARTIE 3 : LA BASE DE DONNÉES ---
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    ports:
+      - "27017:27017"
